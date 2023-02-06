@@ -89,8 +89,7 @@ Parameters:
     NoEcho : "true"
     MinLength: "5"
     AllowedPattern: '[a-zA-Z0-9\(\)\.\-/_@]+'
-    Default: "user123"
-    Description: Default is user123
+    Description: Password for dashboard user (at least 5 characters long)
   VpcCIDR:
     Description: Please enter the IP range (CIDR notation) for this VPC or use Default
     Type: String
