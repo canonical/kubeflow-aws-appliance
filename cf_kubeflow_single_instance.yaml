@@ -1,5 +1,14 @@
 AWSTemplateFormatVersion: 2010-09-09
 Mappings:
+  KubernetesVersionMap:
+    1.7-stable:
+      kubernetesVersion: "1.24"
+    1.6-stable:
+      kubernetesVersion: "1.22"
+    latest-stable:
+      kubernetesVersion: "1.24"
+    latest-beta:
+      kubernetesVersion: "1.24"
   RegionMap:
     eu-central-1:
       AMI: ami-xxxxxxxxxxxxxxxxx
@@ -65,10 +74,12 @@ Parameters:
     Description: Size of the (unencripted DeleteOnTermination) gp2 volume attatched to the instance
   KubeflowVersion:
     Type: String
-    Default: 1.7/stable
+    Default: 1.7-stable
     AllowedValues:
-      - 1.7/stable
-      - 1.6/stable
+      - 1.7-stable
+      - 1.6-stable
+      - latest-stable
+      - latest-beta
     Description: The Kubeflow version to be deployed
   KubeflowDashboardUsername:
     Type: String
@@ -104,19 +115,13 @@ Resources:
       LaunchTemplateName: !Sub "${AppName}"
       LaunchTemplateData:
         UserData:
-          Fn::Base64: !Sub |
+          Fn::Base64: !Sub 
+          - |
             #!/bin/bash
-            if [[ "${KubeflowVersion}" == "1.7/stable" ]]
-            then
-              kubernetes_version="1.24"
-            else
-              kubernetes_version="1.22"
-            fi
-
             apt update
             apt -y upgrade
             for snap in juju juju-wait charmcraft; do sudo snap install $snap --classic; done
-            snap install microk8s --classic --channel=$kubernetes_version/stable
+            snap install microk8s --classic --channel=${kubernetesVersion}/stable
             sudo snap refresh charmcraft --channel latest/candidate
             usermod -a -G microk8s ubuntu
             mkdir /home/ubuntu/.kube
@@ -129,7 +134,7 @@ Resources:
 
             su ubuntu -c 'juju bootstrap microk8s uk8s-controller'
             su ubuntu -c 'juju add-model kubeflow'
-            su ubuntu -c 'juju deploy kubeflow --channel=${KubeflowVersion} --trust'
+            su ubuntu -c 'juju deploy kubeflow --channel=${kubeflowVersion} --trust'
 
             su ubuntu -c 'juju config dex-auth public-url=http://10.64.140.43.nip.io; juju config oidc-gatekeeper public-url=http://10.64.140.43.nip.io; juju config dex-auth static-username=${KubeflowDashboardUsername}; juju config dex-auth static-password=${KubeflowDashboardPassword}'
             sleep 720
@@ -144,6 +149,8 @@ Resources:
             su ubuntu -c 'juju relate mlflow-server admission-webhook'
             
             echo "Charmed MlFlow deployed"
+          - kubernetesVersion: !FindInMap [KubernetesVersionMap, !Ref KubeflowVersion, kubernetesVersion]
+            kubeflowVersion: !Join [ '/', !Split [ '-', !Ref KubeflowVersion ]]
         BlockDeviceMappings:
           - DeviceName: "/dev/sda1"
             Ebs:
