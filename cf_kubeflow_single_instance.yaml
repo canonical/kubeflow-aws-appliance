@@ -120,7 +120,8 @@ Resources:
             #!/bin/bash
             apt update
             apt -y upgrade
-            for snap in juju juju-wait charmcraft; do sudo snap install $snap --classic; done
+            for snap in juju-wait charmcraft; do sudo snap install $snap --classic; done
+            sudo snap install juju --classic --channel=2.9/stable
             snap install microk8s --classic --channel=${kubernetesVersion}/stable
             sudo snap refresh charmcraft --channel latest/candidate
             usermod -a -G microk8s ubuntu
