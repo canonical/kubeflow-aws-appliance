@@ -1,0 +1,315 @@
+AWSTemplateFormatVersion: 2010-09-09
+Mappings:
+  KubernetesVersionMap:
+    1.7-stable:
+      kubernetesVersion: "1.24"
+    1.6-stable:
+      kubernetesVersion: "1.22"
+    latest-stable:
+      kubernetesVersion: "1.24"
+    latest-beta:
+      kubernetesVersion: "1.24"
+  RegionMap:
+    eu-central-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    us-east-1:
+      AMI: ami-0b93ce03dcbcb10f6
+    us-gov-east-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    us-gov-west-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    us-east-2:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    us-west-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    us-west-2:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    ca-central-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    eu-west-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    eu-west-2:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    eu-west-3:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    eu-north-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    eu-south-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    ap-east-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    ap-southeast-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    ap-southeast-2:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    ap-south-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    ap-northeast-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    ap-northeast-2:
+      AMI: ami-xxxxxxxxxxxxxxxxx
+    me-south-1:
+      AMI: ami-xxxxxxxxxxxxxxxxx 
+Description: ""
+Parameters:
+  AppName:
+    Description: Name of the application the cluster will serve
+    Type: String
+    MinLength: "3"
+    AllowedPattern: '[a-zA-Z0-9\(\)\.\-/_]+'
+    Default: "kubeflow-single-instance"
+  KeyPair:
+    Description: Amazon EC2 Key Pair used to ssh to the cluster nodes
+    Type: "AWS::EC2::KeyPair::KeyName"
+  InstanceTypeParameter:
+    Type: String
+    Default: t2.2xlarge
+    AllowedValues:
+      - t2.2xlarge
+    Description: Select the instance type of the cluster nodes
+  InstanceVolumeSize:
+    Type: Number
+    Default: 100
+    MinValue: 100
+    Description: Size of the (unencripted DeleteOnTermination) gp2 volume attatched to the instance
+  KubeflowVersion:
+    Type: String
+    Default: 1.7-stable
+    AllowedValues:
+      - 1.7-stable
+      - 1.6-stable
+      - latest-stable
+      - latest-beta
+    Description: The Kubeflow version to be deployed
+  KubeflowDashboardUsername:
+    Type: String
+    MinLength: "5"
+    AllowedPattern: '[a-zA-Z0-9\(\)\.\-/_@]+'
+    Default: "user123@email.com"
+  KubeflowDashboardPassword:
+    Type: String
+    NoEcho : "true"
+    MinLength: "5"
+    AllowedPattern: '[a-zA-Z0-9\(\)\.\-/_@]+'
+    Description: Password for dashboard user (at least 5 characters long)
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC or use Default
+    Type: String
+    Default: 10.192.0.0/16
+  PublicSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet (random Availability Zone will be assigned)
+    Type: String
+    Default: 10.192.10.0/24
+Resources:
+  SecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Kubeflow allow all egress rule
+      GroupDescription: "Kubeflow instance security group without ingress rules"
+      VpcId: !Ref VPC
+  
+  EC2LaunchTemplate:
+    Type: "AWS::EC2::LaunchTemplate"
+    DependsOn: SecurityGroupEgress
+    Properties:
+      LaunchTemplateName: !Sub "${AppName}"
+      LaunchTemplateData:
+        UserData:
+          Fn::Base64: !Sub 
+          - |
+            #!/bin/bash
+            apt update
+            apt -y upgrade
+            for snap in juju-wait charmcraft; do sudo snap install $snap --classic; done
+            sudo snap install juju --classic --channel=2.9/stable
+            snap install microk8s --classic --channel=${kubernetesVersion}/stable
+            sudo snap refresh charmcraft --channel latest/candidate
+            usermod -a -G microk8s ubuntu
+            mkdir /home/ubuntu/.kube
+            chown -f -R ubuntu /home/ubuntu/.kube
+
+            microk8s enable dns storage metallb:"10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111"
+            sleep 120
+            microk8s.kubectl wait --for=condition=available -nkube-system deployment/coredns deployment/hostpath-provisioner
+            microk8s.kubectl -n kube-system rollout status ds/calico-node
+
+            su ubuntu -c 'juju bootstrap microk8s uk8s-controller'
+            su ubuntu -c 'juju add-model kubeflow'
+            su ubuntu -c 'juju deploy kubeflow --channel=${kubeflowVersion} --trust'
+
+            su ubuntu -c 'juju config dex-auth public-url=http://10.64.140.43.nip.io; juju config oidc-gatekeeper public-url=http://10.64.140.43.nip.io; juju config dex-auth static-username=${KubeflowDashboardUsername}; juju config dex-auth static-password=${KubeflowDashboardPassword}'
+            sleep 720
+            echo "Charmed Kubeflow deployed"
+
+            su ubuntu -c 'juju run --unit istio-pilot/0 -- "export JUJU_DISPATCH_PATH=hooks/config-changed; ./dispatch"'
+            su ubuntu -c 'juju deploy mlflow-server'
+            su ubuntu -c 'juju deploy charmed-osm-mariadb-k8s mlflow-db'
+            su ubuntu -c 'juju relate minio mlflow-server'
+            su ubuntu -c 'juju relate istio-pilot mlflow-server'
+            su ubuntu -c 'juju relate mlflow-db mlflow-server'
+            su ubuntu -c 'juju relate mlflow-server admission-webhook'
+            
+            echo "Charmed MlFlow deployed"
+
+            su ubuntu -c 'juju add-model cos'
+            su ubuntu -c 'juju switch cos'
+            su ubuntu -c 'curl -L https://raw.githubusercontent.com/canonical/cos-lite-bundle/main/overlays/offers-overlay.yaml -O'
+            su ubuntu -c 'juju deploy cos-lite --trust --overlay ./offers-overlay.yaml'
+            su ubuntu -c 'juju switch kubeflow'
+            su ubuntu -c 'juju add-relation argo-controller admin/cos.prometheus-scrape'
+            su ubuntu -c 'juju add-relation dex-auth admin/cos.prometheus-scrape'
+            su ubuntu -c 'juju add-relation katib-controller admin/cos.prometheus-scrape'
+            su ubuntu -c 'juju add-relation kfp-api admin/cos.prometheus-scrape'
+            su ubuntu -c 'juju add-relation metacontroller-operator admin/cos.prometheus-scrape'
+            su ubuntu -c 'juju add-relation minio admin/cos.prometheus-scrape'
+            su ubuntu -c 'juju add-relation seldon-controller-manager admin/cos.prometheus-scrape'
+            su ubuntu -c 'juju add-relation training-operator admin/cos.prometheus-scrape'
+            su ubuntu -c 'juju add-relation jupyter-controller admin/cos.prometheus-scrape'
+            su ubuntu -c 'juju add-relation jupyter-controller admin/cos.grafana-dashboards'
+            su ubuntu -c 'juju add-relation seldon-controller-manager admin/cos.grafana-dashboards'
+            su ubuntu -c 'juju add-relation argo-controller admin/cos.grafana-dashboards'
+
+            echo "COS deployed"
+
+          - kubernetesVersion: !FindInMap [KubernetesVersionMap, !Ref KubeflowVersion, kubernetesVersion]
+            kubeflowVersion: !Join [ '/', !Split [ '-', !Ref KubeflowVersion ]]
+        BlockDeviceMappings:
+          - DeviceName: "/dev/sda1"
+            Ebs:
+              Encrypted: false
+              DeleteOnTermination: true
+              VolumeSize: !Ref InstanceVolumeSize
+              VolumeType: "gp2"
+        IamInstanceProfile:
+          Arn: !GetAtt
+            - InstanceProfile
+            - Arn
+        EbsOptimized: false
+        KeyName: !Sub "${KeyPair}"
+        DisableApiTermination: false
+        ImageId: !FindInMap
+          - RegionMap
+          - !Ref AWS::Region
+          - AMI
+        InstanceType: !Sub "${InstanceTypeParameter}"
+        SecurityGroupIds:
+          - !Ref SecurityGroupEgress
+  EC2Role:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Description: !Sub "${AppName} Role"
+      RoleName: !Sub "${AppName}-EC2Role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action: ec2:CreateTags
+                Effect: Allow
+                Resource: "arn:*:ec2:*:*:instance/*"
+              - Action: ec2:DescribeTags
+                Effect: Allow
+                Resource: "*"
+  AutoScalingAutoScalingGroup:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      AutoScalingGroupName: !Sub "${AppName}"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2LaunchTemplate
+        Version: 1
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      Cooldown: 300
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet
+      HealthCheckType: "EC2"
+      HealthCheckGracePeriod: 300
+      TerminationPolicies:
+        - "NewestInstance"
+      ServiceLinkedRoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling_${AppName}"
+      NewInstancesProtectedFromScaleIn: false
+    DependsOn:
+      - EC2LaunchTemplate
+      - AutoScalingRole
+      - PublicSubnet
+      - PublicSubnetRouteTableAssociation
+      - SecurityGroupEgress
+  AutoScalingScalingPolicy:
+    Type: "AWS::AutoScaling::ScalingPolicy"
+    Properties:
+      AutoScalingGroupName: !Sub "${AppName}"
+      PolicyType: "SimpleScaling"
+      AdjustmentType: "ChangeInCapacity"
+      ScalingAdjustment: 1
+    DependsOn: "AutoScalingAutoScalingGroup"
+  AutoScalingRole:
+    Type: "AWS::IAM::ServiceLinkedRole"
+    Properties:
+      AWSServiceName: autoscaling.amazonaws.com
+      Description: AutoScaling ServiceLinked Role
+      CustomSuffix: !Sub "${AppName}"
+  
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    DependsOn: "EC2Role"
+    Properties:
+      InstanceProfileName: !Sub "${AppName}-InstanceProfile"
+      Roles:
+        - !Ref EC2Role
+  
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value:  !Join ['', [!Ref "AWS::StackName", "-VPC" ]]
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: VPC
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1CIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Public-A
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Public
+  PublicRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
