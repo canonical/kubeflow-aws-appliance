@@ -118,7 +118,7 @@ Resources:
           Fn::Base64: !Sub 
           - |
             #!/bin/bash
-            su ubuntu -c 'curl -L https://raw.githubusercontent.com/canonical/cos-lite-bundle/main/overlays/offers-overlay.yaml -O'
+            su ubuntu -c 'cd ~ && curl -L https://raw.githubusercontent.com/canonical/cos-lite-bundle/main/overlays/offers-overlay.yaml -O'
             apt update
             apt -y upgrade
             for snap in juju-wait charmcraft; do sudo snap install $snap --classic; done
