@@ -154,7 +154,7 @@ Resources:
 
             su ubuntu -c 'juju add-model cos'
             su ubuntu -c 'juju switch cos'                        
-            su ubuntu -c 'juju deploy cos-lite --trust --overlay ./offers-overlay.yaml'
+            su ubuntu -c 'cd ~ && juju deploy cos-lite --trust --overlay ./offers-overlay.yaml'
             su ubuntu -c 'juju switch kubeflow'
             su ubuntu -c 'juju add-relation argo-controller admin/cos.prometheus-scrape'
             su ubuntu -c 'juju add-relation dex-auth admin/cos.prometheus-scrape'
