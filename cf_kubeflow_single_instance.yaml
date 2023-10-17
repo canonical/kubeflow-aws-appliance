@@ -6,9 +6,11 @@ Mappings:
     1.6-stable:
       kubernetesVersion: "1.22"
     latest-stable:
-      kubernetesVersion: "1.24"
+      kubernetesVersion: "1.25"
     latest-beta:
-      kubernetesVersion: "1.24"
+      kubernetesVersion: "1.25"
+    latest-edge:
+      kubernetesVersion: "1.25"
   RegionMap:
     eu-central-1:
       AMI: ami-xxxxxxxxxxxxxxxxx
@@ -69,8 +71,8 @@ Parameters:
     Description: Select the instance type of the cluster nodes
   InstanceVolumeSize:
     Type: Number
-    Default: 100
-    MinValue: 100
+    Default: 200
+    MinValue: 200
     Description: Size of the (unencripted DeleteOnTermination) gp2 volume attatched to the instance
   KubeflowVersion:
     Type: String
@@ -80,6 +82,7 @@ Parameters:
       - 1.6-stable
       - latest-stable
       - latest-beta
+      - latest-edge
     Description: The Kubeflow version to be deployed
   KubeflowDashboardUsername:
     Type: String
@@ -138,18 +141,14 @@ Resources:
             su ubuntu -c 'juju deploy kubeflow --channel=${kubeflowVersion} --trust'
 
             su ubuntu -c 'juju config dex-auth public-url=http://10.64.140.43.nip.io; juju config oidc-gatekeeper public-url=http://10.64.140.43.nip.io; juju config dex-auth static-username=${KubeflowDashboardUsername}; juju config dex-auth static-password=${KubeflowDashboardPassword}'
-            sleep 720
-            echo "Charmed Kubeflow deployed"
 
             su ubuntu -c 'juju run --unit istio-pilot/0 -- "export JUJU_DISPATCH_PATH=hooks/config-changed; ./dispatch"'
-            su ubuntu -c 'juju deploy mlflow-server'
-            su ubuntu -c 'juju deploy charmed-osm-mariadb-k8s mlflow-db'
-            su ubuntu -c 'juju relate minio mlflow-server'
-            su ubuntu -c 'juju relate istio-pilot mlflow-server'
-            su ubuntu -c 'juju relate mlflow-db mlflow-server'
-            su ubuntu -c 'juju relate mlflow-server admission-webhook'
+            su ubuntu -c 'juju deploy mlflow --channel=2.1/stable --trust'
+            su ubuntu -c 'juju deploy resource-dispatcher --channel 1.0/stable --trust'
+            su ubuntu -c 'juju relate mlflow-server:secrets resource-dispatcher:secrets'
+            su ubuntu -c 'juju relate mlflow-server:pod-defaults resource-dispatcher:pod-defaults'
             
-            echo "Charmed MlFlow deployed"
+            echo "Charmed MlFlow and Kubeflow deployed"
           - kubernetesVersion: !FindInMap [KubernetesVersionMap, !Ref KubeflowVersion, kubernetesVersion]
             kubeflowVersion: !Join [ '/', !Split [ '-', !Ref KubeflowVersion ]]
         BlockDeviceMappings:
