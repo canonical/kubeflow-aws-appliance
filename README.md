@@ -1,7 +1,13 @@
 # Steps to test the CloudFormation template
-Login to your [aws console](https://aws.amazon.com/console/) with admin priviledges account. Set the region to `us-east-1` go to `CloudFormation service`. Choose the option to `create stack` (choose subotion `with new resources`). Next choose `Template is ready` and `Upload teamplate file` options. Navigate to `cf_kubeflow_single_instance.yaml` and submit. 
+1. Login to your [aws console](https://aws.amazon.com/console/) with admin priviledges account
+2. Set the region to `us-east-1` go to `CloudFormation service`
+3. Choose the option to `create stack` (choose sub-option `with new resources`)
+4. Choose `Template is ready` and `Upload teamplate file` options
+5. Navigate to `cf_kubeflow_single_instance.yaml` and submit.
+6. Next choose a name for your stack e.g `kubeflow` and choose key-pair from dropdown to allow SSH (key must be created before template. You can create one in EC2 service > key pairs > create)
+7. Wait until the stack is in `CREATE_COMPLETE` state
 
-Next choose a name for your stack e.g `kubeflow` and choose key-pair from dropdown to allow SSH (key must be created before template. You can create one in EC2 service > key pairs > create). Wait until the stack is in `CREATE_COMPLETE` state. To Understand other parameters of template please refer to [technical documentation](#)
+To Understand other parameters of template please refer to [technical documentation](#)
 
 Stack will create one EC2 instance with public vpc subnet and almost empty security group (per AWS appliance quidelines SSH access should be denied by default). To allow the ssh access to the instance go to `EC2` service click on the instance (choose the one with the tag `aws:cloudformation:stack-name: <name you speciffied>`) click on the `Security` tab click on the security group. In the `Inbounds rules` tab click on `Edit inbound rules` add new rule for SSH (you can type ssh in the dropdown and choose CIDR 0.0.0.0/0 for every IP, or you can be specific with your IP). 
 
@@ -30,5 +36,5 @@ If you want to make sure that all the components of the Kubeflow are ready, you 
 ## Cost estimates
 The only charged aws resource within the template is the ec2 instance `t2.2xlarge` with `gp2` volume of size `100GB`. You can find the cost caluculation at [this link](https://calculator.aws/#/estimate?id=2c3ee088d98101f4c1bb1e41cc86704e7a52ddd2)
 
-## Archytecture
+## Architecture
 You can find the archytectural diagram for the template in the file `template1-designer.png`.
