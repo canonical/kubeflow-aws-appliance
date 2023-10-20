@@ -1,11 +1,16 @@
 # Steps to test the CloudFormation template
 1. Login to your [aws console](https://aws.amazon.com/console/) with admin priviledges account
-2. Set the region to `us-east-1` go to `CloudFormation service`
-3. Choose the option to `create stack` (choose sub-option `with new resources`)
-4. Choose `Template is ready` and `Upload teamplate file` options
-5. Navigate to `cf_kubeflow_single_instance.yaml` and submit.
-6. Next choose a name for your stack e.g `kubeflow` and choose key-pair from dropdown to allow SSH (key must be created before template. You can create one in EC2 service > key pairs > create)
-7. Wait until the stack is in `CREATE_COMPLETE` state
+3. Set the region to `us-east-1` go to `CloudFormation service`
+4. Choose the option to `create stack` (choose sub-option `with new resources`)
+5. In the **Create stack** page
+    1. Choose `Template is ready` and `Upload teamplate file` options
+    2. Navigate to `cf_kubeflow_single_instance.yaml` and submit.
+8. Next in **Specify stack details** page
+    1. choose a name for your stack e.g `kubeflow`
+    2. choose key-pair from dropdown to allow SSH (key must be created before template. You can create one in EC2 service > key pairs > create)
+9. Next in **Configure stack options** you don't need to configure something
+10. Make sure all your settings are correct in the last page and deploy the stack
+11. Wait until the stack is in `CREATE_COMPLETE` state
 
 To Understand other parameters of template please refer to [technical documentation](#)
 
