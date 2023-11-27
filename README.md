@@ -8,6 +8,7 @@
 8. Next in **Specify stack details** page
     1. choose a name for your stack e.g `kubeflow`
     2. choose key-pair from dropdown to allow SSH (key must be created before template. You can create one in EC2 service > key pairs > create)
+    3. Fill the `KubeflowDashboardPassword` field
 9. Next in **Configure stack options** you don't need to configure something
 10. Make sure all your settings are correct in the last page and deploy the stack
 11. Wait until the stack is in `CREATE_COMPLETE` state

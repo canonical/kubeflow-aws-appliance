@@ -154,8 +154,8 @@ Resources:
             microk8s.kubectl wait --for=condition=available -nkube-system deployment/coredns deployment/hostpath-provisioner
             microk8s.kubectl -n kube-system rollout status ds/calico-node
 
-            su ubuntu -c 'microk8s config | juju add-k8s microk8s --client'
-            su ubuntu -c 'juju bootstrap microk8s uk8s-controller'
+            su ubuntu -c 'microk8s config | juju add-k8s my-k8s --client'
+            su ubuntu -c 'juju bootstrap my-k8s uk8s-controller'
             su ubuntu -c 'juju add-model kubeflow'
             su ubuntu -c 'juju deploy kubeflow --channel=${kubeflowVersion} --trust'
 
